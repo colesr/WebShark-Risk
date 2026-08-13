@@ -3,27 +3,75 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebShark Risk — AML Analyst Workbench</title>
+<title>Casefile — AML Analyst Workbench</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --ink:#10263D;
-    --ink-2:#1B3A57;
-    --paper:#EEF1F4;
+  /* ===== LIGHT MODE (Red / White / Blue) ===== */
+  :root, [data-theme="light"]{
+    --ink:#0B1F3A;
+    --ink-2:#16325C;
+    --paper:#F4F7FB;
     --card:#FFFFFF;
-    --slate:#5C6B7A;
-    --slate-light:#8B99A8;
-    --line:#D8DEE4;
-    --amber:#C6871A;
-    --amber-bg:#FBF1DF;
-    --red:#B3261E;
-    --red-bg:#FBEAE9;
-    --sage:#2F6F52;
-    --sage-bg:#E7F2EC;
-    --focus:#3D7EBF;
+    --slate:#4A5C73;
+    --slate-light:#7A8DA6;
+    --line:#D0DBE8;
+    --amber:#C41E3A;
+    --amber-bg:#FDECEE;
+    --red:#B22234;
+    --red-bg:#FCE8EB;
+    --sage:#1E4D8C;
+    --sage-bg:#E8F0FA;
+    --focus:#2B6CB0;
+    --sidebar-text:#C5D4E8;
+    --sidebar-muted:#8BA3C0;
+    --sidebar-nav:#AFC2D9;
+    --table-head:#F0F5FA;
+    --table-hover:#EAF1F8;
+    --neutral-bg:#E4ECF5;
+    --banner-info-bg:#E8F0FA;
+    --banner-info-fg:#16325C;
+    --banner-info-bd:#B8CEE6;
+    --banner-warn-fg:#8B1A2B;
+    --banner-warn-bd:#F0C4CB;
+    --btn-danger-hover:#8E1B29;
+    --scroll-thumb:#A8B9CC;
+    --ring-track:#E4ECF5;
   }
+
+  /* ===== DARK MODE ===== */
+  [data-theme="dark"]{
+    --ink:#E8F0FA;
+    --ink-2:#C5D4E8;
+    --paper:#0B1220;
+    --card:#121C2E;
+    --slate:#9BB0C7;
+    --slate-light:#7A90A8;
+    --line:#243447;
+    --amber:#E85A6B;
+    --amber-bg:#3A1A22;
+    --red:#EF4455;
+    --red-bg:#3A1520;
+    --sage:#5B9BD5;
+    --sage-bg:#152A45;
+    --focus:#5B9BD5;
+    --sidebar-text:#C5D4E8;
+    --sidebar-muted:#7A90A8;
+    --sidebar-nav:#9BB0C7;
+    --table-head:#152033;
+    --table-hover:#1A2740;
+    --neutral-bg:#1A2740;
+    --banner-info-bg:#152A45;
+    --banner-info-fg:#A8C8E8;
+    --banner-info-bd:#2A4A6E;
+    --banner-warn-fg:#F0A0A8;
+    --banner-warn-bd:#5A2A35;
+    --btn-danger-hover:#C93344;
+    --scroll-thumb:#3A4F66;
+    --ring-track:#243447;
+  }
+
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;height:100%;}
   body{
@@ -33,6 +81,7 @@
     display:flex;
     min-height:100vh;
     font-size:14px;
+    transition:background .2s, color .2s;
   }
   .mono{font-family:'IBM Plex Mono',monospace;}
   a{color:inherit;}
@@ -43,8 +92,8 @@
   .sidebar{
     width:232px;
     flex-shrink:0;
-    background:var(--ink);
-    color:#CBD8E5;
+    background:#0B1F3A;
+    color:var(--sidebar-text);
     display:flex;
     flex-direction:column;
     padding:20px 0;
@@ -52,28 +101,29 @@
     top:0;
     height:100vh;
   }
+  [data-theme="dark"] .sidebar{background:#060E1A;}
   .brand{
     padding:0 20px 20px 20px;
-    border-bottom:1px solid rgba(255,255,255,0.1);
+    border-bottom:1px solid rgba(255,255,255,0.12);
     margin-bottom:14px;
   }
   .brand-mark{
     display:flex;align-items:center;gap:9px;
   }
   .brand-mark .dot{
-    width:9px;height:9px;border-radius:2px;background:var(--amber);
+    width:9px;height:9px;border-radius:2px;background:var(--red);
     transform:rotate(45deg);
     flex-shrink:0;
   }
   .brand-name{font-weight:800;font-size:16.5px;letter-spacing:0.2px;color:#fff;}
-  .brand-sub{font-size:11px;color:#7E93A8;margin-top:3px;letter-spacing:0.4px;text-transform:uppercase;}
+  .brand-sub{font-size:11px;color:var(--sidebar-muted);margin-top:3px;letter-spacing:0.4px;text-transform:uppercase;}
 
   nav{display:flex;flex-direction:column;gap:2px;padding:0 10px;}
   .nav-item{
     display:flex;align-items:center;gap:10px;
     padding:9px 10px;
     border-radius:6px;
-    color:#B7C6D6;
+    color:var(--sidebar-nav);
     font-size:13.5px;
     font-weight:500;
     background:none;
@@ -82,8 +132,9 @@
     width:100%;
   }
   .nav-item .ic{width:16px;text-align:center;font-size:13px;opacity:0.85;}
-  .nav-item:hover{background:rgba(255,255,255,0.06);color:#fff;}
-  .nav-item.active{background:var(--ink-2);color:#fff;}
+  .nav-item:hover{background:rgba(255,255,255,0.07);color:#fff;}
+  .nav-item.active{background:#16325C;color:#fff;}
+  [data-theme="dark"] .nav-item.active{background:#1A2F4A;}
   .nav-item.active .ic{opacity:1;}
   .nav-badge{
     margin-left:auto;
@@ -99,21 +150,50 @@
   .sidebar-footer{
     margin-top:auto;
     padding:14px 20px 4px 20px;
-    border-top:1px solid rgba(255,255,255,0.1);
+    border-top:1px solid rgba(255,255,255,0.12);
     font-size:12px;
-    color:#7E93A8;
+    color:var(--sidebar-muted);
   }
   .analyst-row{display:flex;align-items:center;gap:9px;margin-top:2px;}
   .analyst-avatar{
     width:26px;height:26px;border-radius:50%;
-    background:var(--amber);
-    color:#10263D;
+    background:var(--red);
+    color:#fff;
     display:flex;align-items:center;justify-content:center;
     font-weight:700;font-size:11px;
     flex-shrink:0;
   }
-  .analyst-name{color:#E4ECF3;font-weight:600;font-size:12.5px;}
-  .analyst-role{color:#7E93A8;font-size:11px;}
+  .analyst-name{color:#E8F0FA;font-weight:600;font-size:12.5px;}
+  .analyst-role{color:var(--sidebar-muted);font-size:11px;}
+
+  /* Theme toggle */
+  .theme-toggle{
+    display:flex;align-items:center;gap:8px;
+    margin:12px 20px 0 20px;
+    padding:8px 10px;
+    border-radius:8px;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.1);
+    cursor:pointer;
+    color:var(--sidebar-nav);
+    font-size:12.5px;
+    font-weight:600;
+    width:calc(100% - 40px);
+  }
+  .theme-toggle:hover{background:rgba(255,255,255,0.1);color:#fff;}
+  .theme-toggle .toggle-track{
+    margin-left:auto;
+    width:36px;height:20px;border-radius:10px;
+    background:rgba(255,255,255,0.15);
+    position:relative;flex-shrink:0;
+  }
+  .theme-toggle .toggle-thumb{
+    position:absolute;top:2px;left:2px;
+    width:16px;height:16px;border-radius:50%;
+    background:#fff;transition:transform .2s;
+  }
+  [data-theme="dark"] .theme-toggle .toggle-thumb{transform:translateX(16px);background:var(--red);}
+  [data-theme="dark"] .theme-toggle .toggle-track{background:rgba(239,68,85,0.35);}
 
   /* ===== MAIN ===== */
   main{flex:1;min-width:0;display:flex;flex-direction:column;}
@@ -149,7 +229,8 @@
     font-weight:600;
     color:var(--slate);
   }
-  .chip-filter.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .chip-filter.active{background:var(--ink);color:var(--card);border-color:var(--ink);}
+  [data-theme="dark"] .chip-filter.active{background:var(--sage);color:#fff;border-color:var(--sage);}
   .search-input{
     border:1px solid var(--line);
     border-radius:20px;
@@ -158,6 +239,8 @@
     font-family:inherit;
     min-width:220px;
     margin-left:auto;
+    background:var(--card);
+    color:var(--ink);
   }
 
   table{width:100%;border-collapse:collapse;}
@@ -170,7 +253,7 @@
     font-weight:700;
     padding:10px 14px;
     border-bottom:1px solid var(--line);
-    background:#FAFBFC;
+    background:var(--table-head);
   }
   td{
     padding:11px 14px;
@@ -179,7 +262,7 @@
     vertical-align:middle;
   }
   tbody tr{cursor:pointer;transition:background .1s;}
-  tbody tr:hover{background:#F5F8FA;}
+  tbody tr:hover{background:var(--table-hover);}
   tbody tr:last-child td{border-bottom:none;}
 
   .badge{
@@ -191,12 +274,12 @@
   .badge-high{background:var(--red-bg);color:var(--red);}
   .badge-medium{background:var(--amber-bg);color:var(--amber);}
   .badge-low{background:var(--sage-bg);color:var(--sage);}
-  .badge-neutral{background:#EAEDF0;color:var(--slate);}
+  .badge-neutral{background:var(--neutral-bg);color:var(--slate);}
   .badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}
 
   .status-pill{
     font-size:11px;font-weight:600;padding:3px 10px;border-radius:5px;
-    background:#EAEDF0;color:var(--ink-2);
+    background:var(--neutral-bg);color:var(--ink-2);
   }
 
   .empty-state{
@@ -254,13 +337,14 @@
   }
   .step .num{
     width:22px;height:22px;border-radius:50%;
-    background:#EAEDF0;color:var(--slate);
+    background:var(--neutral-bg);color:var(--slate);
     display:flex;align-items:center;justify-content:center;
     font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;
     flex-shrink:0;
   }
   .step.done .num{background:var(--sage);color:#fff;}
   .step.current .num{background:var(--ink);color:#fff;}
+  [data-theme="dark"] .step.current .num{background:var(--sage);color:#fff;}
   .step .step-label{font-size:12px;font-weight:600;color:var(--slate);white-space:nowrap;}
   .step.done .step-label,.step.current .step-label{color:var(--ink);}
   .step-connector{width:24px;height:1px;background:var(--line);flex-shrink:0;}
@@ -316,12 +400,14 @@
     border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;
     display:inline-flex;align-items:center;gap:6px;
   }
-  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary{background:var(--ink);color:var(--card);}
+  [data-theme="dark"] .btn-primary{background:var(--sage);color:#fff;}
   .btn-primary:hover{background:var(--ink-2);}
+  [data-theme="dark"] .btn-primary:hover{background:#4A8BC4;}
   .btn-danger{background:var(--red);color:#fff;}
-  .btn-danger:hover{background:#96201A;}
+  .btn-danger:hover{background:var(--btn-danger-hover);}
   .btn-ghost{background:none;border:1px solid var(--line);color:var(--ink);}
-  .btn-ghost:hover{background:#F2F4F6;}
+  .btn-ghost:hover{background:var(--table-hover);}
   .btn-sm{padding:6px 12px;font-size:12px;border-radius:6px;}
   .btn:disabled{opacity:0.4;cursor:not-allowed;}
   .action-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
@@ -330,19 +416,20 @@
     display:flex;gap:10px;align-items:flex-start;
     padding:12px 14px;border-radius:8px;font-size:12.5px;margin-bottom:16px;
   }
-  .banner-info{background:#EAF2FA;color:#1B4B78;border:1px solid #CBE0F2;}
-  .banner-warn{background:var(--amber-bg);color:#8A6412;border:1px solid #F0DAA6;}
+  .banner-info{background:var(--banner-info-bg);color:var(--banner-info-fg);border:1px solid var(--banner-info-bd);}
+  .banner-warn{background:var(--amber-bg);color:var(--banner-warn-fg);border:1px solid var(--banner-warn-bd);}
   .banner strong{display:block;margin-bottom:2px;}
 
   /* toast */
   #toast{
     position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
-    background:var(--ink);color:#fff;padding:11px 20px;border-radius:8px;
+    background:#0B1F3A;color:#fff;padding:11px 20px;border-radius:8px;
     font-size:13px;font-weight:600;opacity:0;pointer-events:none;
     transition:opacity .2s, transform .2s;
     z-index:100;
-    box-shadow:0 8px 24px rgba(0,0,0,0.2);
+    box-shadow:0 8px 24px rgba(0,0,0,0.35);
   }
+  [data-theme="dark"] #toast{background:#1A2F4A;color:#E8F0FA;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
   /* KYC detail */
@@ -353,8 +440,13 @@
   .risk-meter.high span{background:var(--red);}
 
   ::-webkit-scrollbar{width:10px;height:10px;}
-  ::-webkit-scrollbar-thumb{background:#C7D0D9;border-radius:6px;}
+  ::-webkit-scrollbar-thumb{background:var(--scroll-thumb);border-radius:6px;}
   ::-webkit-scrollbar-track{background:transparent;}
+
+  textarea{
+    background:var(--card);
+    color:var(--ink);
+  }
 
   @media (max-width:760px){
     .sidebar{position:fixed;left:-232px;transition:left .2s;z-index:50;}
@@ -376,6 +468,10 @@
     <div class="brand-sub">AML Analyst Workbench</div>
   </div>
   <nav id="nav"></nav>
+  <button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()" title="Toggle light / dark mode">
+    <span id="themeToggleLabel">Dark mode</span>
+    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+  </button>
   <div class="sidebar-footer">
     <div style="text-transform:uppercase;letter-spacing:0.4px;font-size:10.5px;">Signed in as</div>
     <div class="analyst-row">
@@ -634,8 +730,28 @@ const state = {
 };
 
 const STORAGE_KEY = "webshark-risk-workbench-v1";
+const THEME_KEY = "casefile-theme";
 const ANALYST_NAME = "S. Reyes";
 let auditLog = [];
+
+function getPreferredTheme(){
+  const saved = localStorage.getItem(THEME_KEY);
+  if(saved === "dark" || saved === "light") return saved;
+  if(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+  return "light";
+}
+
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  const label = document.getElementById("themeToggleLabel");
+  if(label) label.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  localStorage.setItem(THEME_KEY, theme);
+}
+
+function toggleTheme(){
+  const current = document.documentElement.getAttribute("data-theme") || "light";
+  applyTheme(current === "dark" ? "light" : "dark");
+}
 
 const NAV = [
   {key:"dashboard", label:"Dashboard", ic:"◆"},
@@ -1003,7 +1119,7 @@ function renderCaseDetail(alertId){
     <div class="deadline-ring">
       <div class="ring-wrap">
         <svg width="74" height="74" viewBox="0 0 74 74">
-          <circle cx="37" cy="37" r="30" fill="none" stroke="#EAEDF0" stroke-width="7"/>
+          <circle cx="37" cy="37" r="30" fill="none" stroke="var(--ring-track)" stroke-width="7"/>
           <circle cx="37" cy="37" r="30" fill="none" stroke="${ringColor}" stroke-width="7"
             stroke-dasharray="${dash} ${circumference}" stroke-linecap="round"/>
         </svg>
@@ -1073,7 +1189,7 @@ function renderCaseDetail(alertId){
       <div><strong>${a.status==='Cleared'?'Cleared':'Escalated'}</strong>${a.narrative||'Escalated to senior analyst for SAR drafting — see SAR Drafts.'}</div>
     </div>`;
     if(a.narrative){
-      html += `<div class="mono" style="font-size:12px;line-height:1.7;color:var(--ink-2);background:#FAFBFC;border:1px solid var(--line);border-radius:8px;padding:12px;">${a.narrative}</div>`;
+      html += `<div class="mono" style="font-size:12px;line-height:1.7;color:var(--ink-2);background:var(--table-head);border:1px solid var(--line);border-radius:8px;padding:12px;">${a.narrative}</div>`;
     }
     html += `<div class="action-row" style="margin-top:12px;">
       <button class="btn btn-ghost btn-sm" onclick="markQcReviewed('${a.id}')" ${a.qcReviewed?"disabled":""}>${a.qcReviewed?"QC review completed":"Mark QC review complete"}</button>
@@ -1698,6 +1814,7 @@ function render(){
 
 loadAppState();
 initializeWorkflowData();
+applyTheme(getPreferredTheme());
 render();
 </script>
 </body>
