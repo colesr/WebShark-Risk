@@ -633,6 +633,10 @@ const state = {
   alertSearch:""
 };
 
+const STORAGE_KEY = "webshark-risk-workbench-v1";
+const ANALYST_NAME = "S. Reyes";
+let auditLog = [];
+
 const NAV = [
   {key:"dashboard", label:"Dashboard", ic:"◆"},
   {key:"alerts", label:"Alert Queue", ic:"▲", badgeFn:()=>alerts.filter(a=>a.status==="New").length},
@@ -651,6 +655,132 @@ const TITLES = {
   sanctions:["Sanctions Screening","OFAC / UN / EU / UK OFSI list matches pending resolution"]
 };
 
+function initializeWorkflowData(){
+  alerts.forEach(a=>{
+    if(!Array.isArray(a.typologies)) a.typologies = [];
+    if(typeof a.triageNotes !== "string") a.triageNotes = "";
+    if(typeof a.qcReviewed !== "boolean") a.qcReviewed = !!a.qcReviewed;
+    if((a.status === "Cleared" || a.status === "Escalated") && !a.disposition){
+      a.disposition = a.status === "Cleared" ? "Clear" : "Escalate";
+    }
+    if(a.status !== "New" && !a.triageStartedAt){
+      a.triageStartedAt = a.generatedDate;
+    }
+  });
+
+  sars.forEach(s=>{
+    if(!s.qaChecks){
+      s.qaChecks = {
+        facts:false,
+        chronology:false,
+        counterparties:false,
+        confidentiality:false
+      };
+    }
+  });
+
+  ctrRecords.forEach(r=>{
+    if(typeof r.reviewNote !== "string") r.reviewNote = r.note || "";
+  });
+
+  sanctionsHits.forEach(h=>{
+    if(typeof h.resolutionNote !== "string") h.resolutionNote = h.note || "";
+  });
+
+  if(!Array.isArray(auditLog)) auditLog = [];
+}
+
+function replaceArrayInPlace(target, source){
+  target.splice(0, target.length, ...source);
+}
+
+function loadAppState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const parsed = JSON.parse(raw);
+    if(Array.isArray(parsed.customers)) replaceArrayInPlace(customers, parsed.customers);
+    if(Array.isArray(parsed.alerts)) replaceArrayInPlace(alerts, parsed.alerts);
+    if(Array.isArray(parsed.sars)) replaceArrayInPlace(sars, parsed.sars);
+    if(Array.isArray(parsed.ctrRecords)) replaceArrayInPlace(ctrRecords, parsed.ctrRecords);
+    if(Array.isArray(parsed.sanctionsHits)) replaceArrayInPlace(sanctionsHits, parsed.sanctionsHits);
+    if(Array.isArray(parsed.auditLog)) auditLog = parsed.auditLog;
+    if(parsed.state && typeof parsed.state === "object"){
+      if(typeof parsed.state.alertFilter === "string") state.alertFilter = parsed.state.alertFilter;
+      if(typeof parsed.state.alertSearch === "string") state.alertSearch = parsed.state.alertSearch;
+      if(typeof parsed.state.view === "string") state.view = parsed.state.view;
+    }
+  } catch(err){
+    console.warn("Failed to load local app state", err);
+  }
+}
+
+function saveAppState(){
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      customers,
+      alerts,
+      sars,
+      ctrRecords,
+      sanctionsHits,
+      auditLog,
+      state:{
+        view:state.view,
+        alertFilter:state.alertFilter,
+        alertSearch:state.alertSearch
+      }
+    }));
+  } catch(err){
+    console.warn("Failed to save local app state", err);
+  }
+}
+
+function recordAudit(entityType, entityId, transition, details, context){
+  auditLog.push({
+    id:`AUD-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+    ts:new Date().toISOString(),
+    actor:ANALYST_NAME,
+    entityType,
+    entityId,
+    transition,
+    details,
+    context:context || {}
+  });
+}
+
+function formatAuditTs(ts){
+  return new Date(ts).toLocaleString('en-US', {
+    month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit'
+  });
+}
+
+function getAuditForAlert(alertId, customerId){
+  const rows = auditLog.filter(e=>
+    (e.entityType === "alert" && e.entityId === alertId) ||
+    (e.context && e.context.alertId === alertId) ||
+    (e.context && e.context.customerId === customerId)
+  );
+  return rows.sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+}
+
+function renderAuditPanel(entries){
+  if(!entries.length){
+    return `<div style="font-size:12.5px;color:var(--slate);">No workflow events logged yet for this case.</div>`;
+  }
+  return entries.slice(0,16).map(e=>`
+    <div class="related-item" style="align-items:flex-start;">
+      <div>
+        <div style="font-weight:600;">${e.transition}</div>
+        <div class="reason">${e.details}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div class="mono" style="font-size:11px;">${formatAuditTs(e.ts)}</div>
+        <div class="reason">${e.actor}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
 /* =========================================================
    HELPERS
    ========================================================= */
@@ -661,6 +791,9 @@ function fmtMoney(n){
 }
 function fmtDate(d){
   return new Date(d+"T00:00:00").toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+function todayISO(){
+  return new Date().toISOString().slice(0,10);
 }
 function daysBetween(a,b){
   return Math.round((new Date(b) - new Date(a)) / 86400000);
@@ -691,6 +824,7 @@ function showToast(msg){
 function setView(view, extra){
   state.view = view;
   Object.assign(state, extra||{});
+  saveAppState();
   render();
   window.scrollTo({top:0,behavior:'instant'});
 }
@@ -832,12 +966,16 @@ function renderCaseDetail(alertId){
   const circumference = 2*Math.PI*30;
   const dash = circumference*pct;
 
+  const triageNoteLen = (a.triageNotes || "").trim().length;
+  const typologyCount = (a.typologies || []).length;
+  const auditEntries = getAuditForAlert(a.id, c.id);
+
   const stepDone = {
     generation:true,
-    triage: a.status!=="New",
-    building: a.status==="In Review"||a.status==="Escalated"||a.status==="Cleared",
-    analysis: a.status==="Escalated"||a.status==="Cleared",
-    disposition: a.status==="Escalated"||a.status==="Cleared",
+    triage: !!a.triageStartedAt || a.status!=="New",
+    building: a.status!=="New" && triageNoteLen>=20,
+    analysis: typologyCount>0,
+    disposition: !!a.disposition,
     qc: a.status==="Cleared" && !!a.qcReviewed
   };
   function stepClass(key,label,current){
@@ -902,15 +1040,30 @@ function renderCaseDetail(alertId){
   });
   html += `</tbody></table></div>`;
 
+  // triage
+  html += `<div class="card panel"><h3>Triage and case building</h3>`;
+  if(a.status === "New"){
+    html += `<div class="banner banner-warn"><div><strong>Triage not started</strong>Start triage before submitting a final disposition so your workflow history reflects review steps.</div></div>`;
+  }
+  html += `<textarea id="triageNotes" placeholder="Capture initial findings: why this alert fired, what behavior is unusual, and what evidence you validated...">${a.triageNotes || ""}</textarea>
+    <div class="char-count"><span id="triageCharCount">${(a.triageNotes || "").length}</span> characters</div>
+    <div class="action-row">
+      <button class="btn btn-ghost" onclick="saveTriageNotes('${a.id}')">Save triage notes</button>
+      <button class="btn btn-primary" onclick="startInvestigation('${a.id}')" ${a.status!=="New" ? "disabled" : ""}>Start investigation</button>
+    </div>`;
+  html += `</div>`;
+
   // typology analysis
   html += `<div class="card panel"><h3>Typology analysis</h3>
     <p style="font-size:12.5px;color:var(--slate);margin-top:0;">Check any patterns supported by the transaction history above.</p>`;
   typologyOptions.forEach(t=>{
+    const checked = (a.typologies || []).includes(t.key) ? "checked" : "";
     html += `<label class="typology-check">
-      <input type="checkbox" id="typ-${t.key}">
+      <input type="checkbox" id="typ-${t.key}" ${checked} onchange="toggleTypology('${a.id}','${t.key}',this.checked)">
       <div><div class="t-name">${t.name}</div><div class="t-desc">${t.desc}</div></div>
     </label>`;
   });
+  html += `<div style="font-size:12px;color:var(--slate);margin-top:10px;">${typologyCount} typolog${typologyCount===1?"y":"ies"} selected.</div>`;
   html += `</div>`;
 
   // disposition
@@ -922,9 +1075,13 @@ function renderCaseDetail(alertId){
     if(a.narrative){
       html += `<div class="mono" style="font-size:12px;line-height:1.7;color:var(--ink-2);background:#FAFBFC;border:1px solid var(--line);border-radius:8px;padding:12px;">${a.narrative}</div>`;
     }
+    html += `<div class="action-row" style="margin-top:12px;">
+      <button class="btn btn-ghost btn-sm" onclick="markQcReviewed('${a.id}')" ${a.qcReviewed?"disabled":""}>${a.qcReviewed?"QC review completed":"Mark QC review complete"}</button>
+      <button class="btn btn-ghost btn-sm" onclick="reopenCase('${a.id}')">Reopen case</button>
+    </div>`;
   } else {
-    html += `<textarea id="dispositionNarrative" placeholder="Write a factual, chronological narrative explaining your disposition decision…"></textarea>
-      <div class="char-count"><span id="charCount">0</span> characters</div>
+    html += `<textarea id="dispositionNarrative" placeholder="Write a factual, chronological narrative explaining your disposition decision…">${a.dispositionDraft || ""}</textarea>
+      <div class="char-count"><span id="charCount">${(a.dispositionDraft || "").length}</span> characters</div>
       <div class="action-row">
         <button class="btn btn-primary" onclick="disposeCase('${a.id}','Clear')">Clear / Close</button>
         <button class="btn btn-danger" onclick="disposeCase('${a.id}','Escalate')">Escalate to SAR</button>
@@ -989,38 +1146,137 @@ function renderCaseDetail(alertId){
   }
   html += `</div>`;
 
+  html += `<div class="card panel"><h3>Audit trail</h3>${renderAuditPanel(auditEntries)}</div>`;
+
   html += `</div></div>`; // close case-grid
 
   document.getElementById('content').innerHTML = html;
 
   const ta = document.getElementById('dispositionNarrative');
   if(ta){
-    ta.addEventListener('input', ()=>{ document.getElementById('charCount').textContent = ta.value.length; });
+    ta.addEventListener('input', ()=>{
+      document.getElementById('charCount').textContent = ta.value.length;
+      a.dispositionDraft = ta.value;
+    });
   }
+
+  const triageTa = document.getElementById('triageNotes');
+  if(triageTa){
+    triageTa.addEventListener('input', ()=>{
+      document.getElementById('triageCharCount').textContent = triageTa.value.length;
+      a.triageNotes = triageTa.value;
+    });
+  }
+}
+
+function saveTriageNotes(alertId){
+  const a = alertById(alertId);
+  const ta = document.getElementById('triageNotes');
+  if(!ta) return;
+  a.triageNotes = ta.value;
+  recordAudit("alert", a.id, "Triage notes updated", "Case-building notes were saved.", {alertId:a.id, customerId:a.customerId});
+  saveAppState();
+  showToast("Triage notes saved.");
+  renderCaseDetail(alertId);
+}
+
+function startInvestigation(alertId){
+  const a = alertById(alertId);
+  if(a.status !== "New") return;
+  const previousStatus = a.status;
+  a.status = "In Review";
+  a.triageStartedAt = todayISO();
+  if((a.triageNotes || "").trim().length < 20){
+    a.triageNotes = (a.triageNotes || "") + "Initial triage started; transaction pattern under analyst review.";
+  }
+  recordAudit("alert", a.id, `${previousStatus} -> ${a.status}`, "Investigation started from triage stage.", {alertId:a.id, customerId:a.customerId});
+  saveAppState();
+  showToast(`${a.id} moved to In Review.`);
+  renderNav();
+  renderCaseDetail(alertId);
+}
+
+function toggleTypology(alertId, key, checked){
+  const a = alertById(alertId);
+  const set = new Set(a.typologies || []);
+  if(checked) set.add(key); else set.delete(key);
+  a.typologies = Array.from(set);
+  recordAudit("alert", a.id, "Typology selection changed", `${checked ? "Added" : "Removed"} typology: ${key}.`, {alertId:a.id, customerId:a.customerId});
+  saveAppState();
+  showToast("Typology selections updated.");
+  renderCaseDetail(alertId);
+}
+
+function markQcReviewed(alertId){
+  const a = alertById(alertId);
+  a.qcReviewed = true;
+  a.qcReviewedAt = todayISO();
+  recordAudit("alert", a.id, "QC review completed", "Case was marked as quality-control reviewed.", {alertId:a.id, customerId:a.customerId});
+  saveAppState();
+  showToast(`${a.id} marked as QC reviewed.`);
+  renderCaseDetail(alertId);
 }
 
 function disposeCase(alertId, action){
   const a = alertById(alertId);
-  const ta = document.getElementById('dispositionNarrative');
-  const text = ta ? ta.value.trim() : "";
-  if(text.length < 20){
-    showToast("Add a narrative of at least 20 characters before submitting a disposition.");
+  if(a.status === "New"){
+    showToast("Start triage before disposition.");
     return;
   }
+  const ta = document.getElementById('dispositionNarrative');
+  const text = ta ? ta.value.trim() : "";
+  if(text.length < 120){
+    showToast("Add a narrative of at least 120 characters before submitting a disposition.");
+    return;
+  }
+  if((a.typologies || []).length === 0){
+    showToast("Select at least one typology before submitting a disposition.");
+    return;
+  }
+  const previousStatus = a.status;
   if(action==="Clear"){
     a.status = "Cleared";
     a.disposition = "Clear";
     a.narrative = text;
+    a.qcReviewed = false;
+    recordAudit("alert", a.id, `${previousStatus} -> ${a.status}`, "Disposition submitted as Clear/Close.", {alertId:a.id, customerId:a.customerId});
     showToast(`${a.id} cleared and closed.`);
   } else {
     a.status = "Escalated";
     a.disposition = "Escalate";
     a.narrative = text;
     if(!sars.find(s=>s.alertId===a.id)){
-      sars.push({id:"SAR-"+(2200+sars.length+Math.floor(Math.random()*90)), alertId:a.id, customerId:a.customerId, detectedDate:a.generatedDate, status:"Drafting", narrative:text});
+      const sarId = "SAR-"+(2200+sars.length+Math.floor(Math.random()*90));
+      sars.push({
+        id:sarId,
+        alertId:a.id,
+        customerId:a.customerId,
+        detectedDate:a.generatedDate,
+        status:"Drafting",
+        narrative:text,
+        qaChecks:{facts:false,chronology:false,counterparties:false,confidentiality:false}
+      });
+      recordAudit("sar", sarId, "SAR draft created", `Created from alert ${a.id}.`, {alertId:a.id, customerId:a.customerId});
     }
+    a.qcReviewed = false;
+    recordAudit("alert", a.id, `${previousStatus} -> ${a.status}`, "Disposition submitted as Escalate to SAR.", {alertId:a.id, customerId:a.customerId});
     showToast(`${a.id} escalated. SAR draft created.`);
   }
+  a.dispositionDraft = "";
+  saveAppState();
+  renderNav();
+  renderCaseDetail(alertId);
+}
+
+function reopenCase(alertId){
+  const a = alertById(alertId);
+  const previousStatus = a.status;
+  a.status = "In Review";
+  a.disposition = null;
+  a.qcReviewed = false;
+  recordAudit("alert", a.id, `${previousStatus} -> ${a.status}`, "Case reopened for additional investigation.", {alertId:a.id, customerId:a.customerId});
+  saveAppState();
+  showToast(`${a.id} reopened for investigation.`);
   renderNav();
   renderCaseDetail(alertId);
 }
@@ -1084,6 +1340,7 @@ function renderSarDetail(sarId){
         <button class="btn btn-ghost" onclick="saveSar('${s.id}')">Save draft</button>
         <button class="btn btn-primary" ${s.status==='Filed'?'disabled':''} onclick="markSarStatus('${s.id}','Ready for Review')">Send to senior analyst</button>
         <button class="btn btn-danger" ${s.status==='Filed'?'disabled':''} onclick="markSarStatus('${s.id}','Filed')">Mark filed (BSA E-Filing)</button>
+        ${s.status==='Filed'?`<button class="btn btn-ghost" onclick="markSarStatus('${s.id}','Drafting')">Reopen draft</button>`:''}
       </div>
     </div>
   </div><div>
@@ -1093,6 +1350,12 @@ function renderSarDetail(sarId){
         <div><div class="k">Risk rating</div><div class="v">${c.riskRating}</div></div>
         <div class="full"><div class="k">Expected activity</div><div class="v" style="font-weight:500;">${c.expectedActivity}</div></div>
       </div>
+    </div>
+    <div class="card panel"><h3>Narrative QA checklist</h3>
+      <label class="typology-check"><input type="checkbox" ${s.qaChecks.facts?"checked":""} onchange="toggleSarCheck('${s.id}','facts',this.checked)"><div><div class="t-name">Facts only</div><div class="t-desc">Narrative avoids speculation and legal conclusions.</div></div></label>
+      <label class="typology-check"><input type="checkbox" ${s.qaChecks.chronology?"checked":""} onchange="toggleSarCheck('${s.id}','chronology',this.checked)"><div><div class="t-name">Chronology complete</div><div class="t-desc">Timeline is chronological with key date markers.</div></div></label>
+      <label class="typology-check"><input type="checkbox" ${s.qaChecks.counterparties?"checked":""} onchange="toggleSarCheck('${s.id}','counterparties',this.checked)"><div><div class="t-name">Counterparties identified</div><div class="t-desc">Entities, channels, and amounts are clearly identified.</div></div></label>
+      <label class="typology-check"><input type="checkbox" ${s.qaChecks.confidentiality?"checked":""} onchange="toggleSarCheck('${s.id}','confidentiality',this.checked)"><div><div class="t-name">Confidentiality reminder reviewed</div><div class="t-desc">No customer-facing disclosure language included.</div></div></label>
     </div>
   </div></div>`;
 
@@ -1104,12 +1367,59 @@ function renderSarDetail(sarId){
 function saveSar(id){
   const s = sars.find(x=>x.id===id);
   s.narrative = document.getElementById('sarNarrative').value;
+  recordAudit("sar", s.id, "SAR draft updated", "Narrative draft was saved.", {alertId:s.alertId, customerId:s.customerId});
+  saveAppState();
   showToast("Draft saved.");
 }
+
+function toggleSarCheck(id, key, checked){
+  const s = sars.find(x=>x.id===id);
+  s.qaChecks[key] = checked;
+  recordAudit("sar", s.id, "SAR QA checklist updated", `${checked ? "Checked" : "Unchecked"} ${key}.`, {alertId:s.alertId, customerId:s.customerId});
+  saveAppState();
+  showToast("SAR QA checklist updated.");
+}
+
 function markSarStatus(id, status){
   const s = sars.find(x=>x.id===id);
   s.narrative = document.getElementById('sarNarrative').value;
+  const previousStatus = s.status;
+
+  const checks = Object.values(s.qaChecks || {}).filter(Boolean).length;
+  if(status === "Ready for Review"){
+    if(s.narrative.trim().length < 150){
+      showToast("Expand the SAR narrative to at least 150 characters before review.");
+      return;
+    }
+    if(checks < 3){
+      showToast("Complete at least 3 QA checklist items before sending for review.");
+      return;
+    }
+  }
+
+  if(status === "Filed"){
+    if(s.status !== "Ready for Review"){
+      showToast("Set status to Ready for Review before filing.");
+      return;
+    }
+    if(s.narrative.trim().length < 200){
+      showToast("Expand the SAR narrative to at least 200 characters before filing.");
+      return;
+    }
+    if(checks < 4){
+      showToast("Complete all QA checklist items before marking filed.");
+      return;
+    }
+    const linked = alertById(s.alertId);
+    if(linked){
+      linked.qcReviewed = true;
+      linked.qcReviewedAt = todayISO();
+    }
+  }
+
   s.status = status;
+  recordAudit("sar", s.id, `${previousStatus} -> ${s.status}`, "SAR workflow status updated.", {alertId:s.alertId, customerId:s.customerId});
+  saveAppState();
   showToast(status==="Filed" ? `${s.id} marked filed via BSA E-Filing.` : `${s.id} sent for senior review.`);
   renderNav();
   renderSarDetail(id);
@@ -1131,14 +1441,57 @@ function renderCtr(){
       <td class="mono">${fmtDate(r.date)}</td>
       <td class="mono" style="font-weight:600;">${fmtMoney(r.amount)}</td>
       <td><span class="status-pill">${r.status}</span></td>
-      <td>${r.structuring ? `<span class="badge badge-medium">Flagged</span>` : '<span style="color:var(--slate-light);">—</span>'}</td>
+      <td>${r.structuring ? `<span class="badge badge-medium">Flagged</span>` : '<span style="color:var(--slate-light);">—</span>'}
+      ${r.status === "Under Review" ? `<div class="action-row" style="margin-top:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="resolveCtr('${r.id}','Closed')">No CTR required</button>
+        <button class="btn btn-danger btn-sm" onclick="resolveCtr('${r.id}','Escalated')">Escalate to alert</button>
+      </div>` : ""}
+      </td>
     </tr>`;
-    if(r.note){
-      html += `<tr><td></td><td colspan="5" style="color:var(--slate);font-size:12px;padding-top:0;">${r.note}</td></tr>`;
+    if(r.reviewNote){
+      html += `<tr><td></td><td colspan="5" style="color:var(--slate);font-size:12px;padding-top:0;">${r.reviewNote}</td></tr>`;
     }
   });
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
+}
+
+function resolveCtr(id, status){
+  const r = ctrRecords.find(x=>x.id===id);
+  const previousStatus = r.status;
+  if(status === "Closed"){
+    r.status = "Closed";
+    r.structuring = false;
+    r.reviewNote = "Structuring reviewed and documented. No reportable single cash transaction or same-day aggregate requiring CTR filing.";
+    showToast(`${r.id} closed with documented structuring review.`);
+  } else {
+    r.status = "Escalated";
+    r.structuring = true;
+    r.reviewNote = "Structuring concern escalated to transaction monitoring for alert generation and full case investigation.";
+    const existing = alerts.find(a=>a.accountId===r.accountId && a.scenario.includes("CTR structuring follow-up"));
+    if(!existing){
+      const newAlertId = `ALT-${59000 + alerts.length + 1}`;
+      alerts.push({
+        id:newAlertId,
+        customerId:r.customerId,
+        accountId:r.accountId,
+        generatedDate:todayISO(),
+        scenario:"CTR structuring follow-up — aggregate cash activity below threshold requires enhanced review",
+        priority:"Medium",
+        status:"New",
+        score:72,
+        aiFlag:false,
+        typologies:["structuring"],
+        triageNotes:""
+      });
+      recordAudit("alert", newAlertId, "Created from CTR review", `Generated from ${r.id} escalation.`, {customerId:r.customerId});
+      renderNav();
+    }
+    showToast(`${r.id} escalated to alert queue.`);
+  }
+  recordAudit("ctr", r.id, `${previousStatus} -> ${r.status}`, "CTR structuring workflow status updated.", {customerId:r.customerId});
+  saveAppState();
+  renderCtr();
 }
 
 /* =========================================================
@@ -1225,9 +1578,28 @@ function renderKycDetail(customerId){
       </div>`;
     });
   }
-  html += `</div></div></div>`;
+  html += `</div>
+    <div class="card panel"><h3>Review workflow</h3>
+      <div style="font-size:12.5px;color:var(--slate);">Complete periodic review to update review timestamps and schedule the next due date based on risk tier.</div>
+      <div class="action-row"><button class="btn btn-primary btn-sm" onclick="completeKycReview('${c.id}')">Complete periodic review</button></div>
+    </div></div></div>`;
 
   document.getElementById('content').innerHTML = html;
+}
+
+function completeKycReview(customerId){
+  const c = customerById(customerId);
+  const previousNextReview = c.nextReview;
+  c.lastReview = todayISO();
+  const next = new Date();
+  if(c.riskRating === "High") next.setDate(next.getDate()+365);
+  else if(c.riskRating === "Medium") next.setDate(next.getDate()+540);
+  else next.setDate(next.getDate()+730);
+  c.nextReview = next.toISOString().slice(0,10);
+  recordAudit("kyc", c.id, "Periodic review completed", `Review completed. Next review moved from ${previousNextReview} to ${c.nextReview}.`, {customerId:c.id});
+  saveAppState();
+  showToast(`Periodic review completed for ${c.id}.`);
+  renderKycDetail(customerId);
 }
 
 /* =========================================================
@@ -1247,19 +1619,53 @@ function renderSanctions(){
       <td>${h.status==="Pending Review" ? `
         <button class="btn btn-ghost btn-sm" onclick="resolveSanctions('${h.id}','False Positive')">False positive</button>
         <button class="btn btn-danger btn-sm" onclick="resolveSanctions('${h.id}','True Match — Escalated')">True match</button>
-      ` : ''}</td>
+      ` : `
+        <button class="btn btn-ghost btn-sm" onclick="resolveSanctions('${h.id}','Pending Review')">Reopen</button>
+      `}</td>
     </tr>`;
     html += `<tr><td colspan="6" style="color:var(--slate);font-size:12px;padding-top:0;">${h.note}</td></tr>`;
   });
   html += `</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 }
+
+function ensureSanctionsAlert(h){
+  const customer = customers.find(c=>h.name.includes(c.name) || c.name.includes(h.name));
+  if(!customer) return;
+  const existing = alerts.find(a=>a.scenario.includes(h.id));
+  if(existing) return;
+  const newAlertId = `ALT-${59500 + alerts.length + 1}`;
+  alerts.push({
+    id:newAlertId,
+    customerId:customer.id,
+    accountId:customer.accountId,
+    generatedDate:todayISO(),
+    scenario:`Sanctions follow-up — confirmed list match ${h.id} requires enhanced review and disposition`,
+    priority:"High",
+    status:"Escalated",
+    score:96,
+    aiFlag:false,
+    typologies:["layering"],
+    triageNotes:"Sanctions hit confirmed and escalated for immediate review."
+  });
+  recordAudit("alert", newAlertId, "Created from sanctions resolution", `Generated from confirmed sanctions match ${h.id}.`, {customerId:customer.id});
+}
+
 function resolveSanctions(id, status){
   const h = sanctionsHits.find(x=>x.id===id);
+  const previousStatus = h.status;
   h.status = status;
   h.note = status==="False Positive"
     ? "Resolved as false positive by analyst — identifying details do not correlate to listed entity."
-    : "Confirmed true match. Escalated to sanctions officer for block/freeze review.";
+    : status==="Pending Review"
+      ? "Reopened for additional analyst review."
+      : "Confirmed true match. Escalated to sanctions officer for block/freeze review.";
+  if(status === "True Match — Escalated"){
+    ensureSanctionsAlert(h);
+    renderNav();
+  }
+  recordAudit("sanctions", h.id, `${previousStatus} -> ${h.status}`, "Sanctions screening status updated.", {});
+  saveAppState();
   showToast(`${h.id} resolved: ${status}`);
   renderSanctions();
 }
@@ -1290,6 +1696,8 @@ function render(){
   else if(state.view==="sanctions") renderSanctions();
 }
 
+loadAppState();
+initializeWorkflowData();
 render();
 </script>
 </body>
